@@ -9,9 +9,12 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Build APK
+    name: Build & Publish APK
     runs-on: ubuntu-latest
 
     steps:
@@ -30,7 +33,7 @@ jobs:
         with:
           gradle-version: '8.2'
 
-      # Build Debug APK directly using the Gradle CLI (completely avoids wrapper jar issues)
+      # Build Debug APK
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
 
@@ -38,27 +41,66 @@ jobs:
       - name: Build Release APK (Unsigned)
         run: gradle assembleRelease --stacktrace
 
-      - name: Upload Debug APK
+      # Prepare nicely named APK files for release & artifacts
+      - name: Prepare APK Files
+        run: |
+          mkdir -p release-apks
+          cp app/build/outputs/apk/debug/app-debug.apk release-apks/BarcodeFloating-debug.apk
+          if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk release-apks/BarcodeFloating-release-unsigned.apk
+          fi
+
+      # Upload Artifacts (accessible in Actions tab)
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BarcodeFloating-Debug-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: release-apks/BarcodeFloating-debug.apk
           retention-days: 14
 
-      - name: Upload Release APK
+      - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BarcodeFloating-Release-APK
-          path: app/build/outputs/apk/release/*.apk
+          path: release-apks/BarcodeFloating-release-unsigned.apk
           retention-days: 14
 
-      # Automatically publish a GitHub Release when a version tag (e.g. v1.0.0) is pushed
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Determine Release Tag (uses Git tag if present, otherwise generates version from run number)
+      - name: Determine Tag
+        id: tag_info
+        if: github.event_name != 'pull_request'
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            TAG_NAME="v1.0.${{ github.run_number }}"
+          fi
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+
+      # Automatically publish to GitHub Releases on push or manual trigger
+      - name: Publish to GitHub Releases
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag_info.outputs.tag_name }}
+          name: "Barcode Floating Reader ${{ steps.tag_info.outputs.tag_name }}"
+          body: |
+            ## 📱 Barcode Floating Reader App
+            Built from commit: `${{ github.sha }}`
+
+            ### 📦 Download & Install:
+            - **[BarcodeFloating-debug.apk](https://github.com/${{ github.repository }}/releases/download/${{ steps.tag_info.outputs.tag_name }}/BarcodeFloating-debug.apk)** *(Ready to install directly on your Android phone)*
+            - Compatible with **Android 5.0 (API 21 / Lollipop)** and newer.
+
+            ### ✨ Features Included:
+            - Movable floating button over any app.
+            - Auto-copy to clipboard on scan.
+            - Auto-paste into selected input fields via Accessibility Service.
+            - QR & Barcode scanning powered by ZXing.
           files: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+            release-apks/BarcodeFloating-debug.apk
+            release-apks/BarcodeFloating-release-unsigned.apk
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
