@@ -1,0 +1,53 @@
+<resources>
+    <string name="app_name">Barcode Floating</string>
+
+    <!-- Accessibility -->
+    <string name="accessibility_service_label">Barcode Auto-Paste Service</string>
+    <string name="accessibility_service_description">Automatically pastes scanned barcodes into your currently selected input field across any app.</string>
+
+    <!-- Main Activity -->
+    <string name="title_floating_control">Floating Button Control</string>
+    <string name="desc_floating_control">Display a movable floating button over other apps to scan barcodes on demand.</string>
+    <string name="switch_floating_button">Show Floating Barcode Button</string>
+
+    <string name="title_permissions">Required Permissions</string>
+    <string name="perm_camera_title">Camera Permission</string>
+    <string name="perm_camera_desc">Required to scan barcodes with your device camera.</string>
+    <string name="perm_overlay_title">Display Over Other Apps</string>
+    <string name="perm_overlay_desc">Required to show the floating button on top of other applications.</string>
+    <string name="perm_accessibility_title">Auto-Paste (Accessibility)</string>
+    <string name="perm_accessibility_desc">Enables automatic pasting directly into selected input fields in any app.</string>
+
+    <string name="btn_grant">Grant</string>
+    <string name="status_granted">Granted</string>
+    <string name="status_enabled">Active</string>
+    <string name="status_disabled">Off</string>
+
+    <!-- Test Input Section -->
+    <string name="title_test_input">Test Input &amp; Auto-Paste</string>
+    <string name="desc_test_input">Tap the field below to focus it, then tap the floating button to scan and test automatic insertion:</string>
+    <string name="hint_test_input">Tap here to focus cursor...</string>
+    <string name="btn_paste_clipboard">Paste From Clipboard</string>
+    <string name="btn_clear">Clear</string>
+
+    <!-- Direct Scan -->
+    <string name="btn_scan_now">Direct Barcode Scan</string>
+
+    <!-- Scan History -->
+    <string name="title_scan_history">Recent Scans</string>
+    <string name="btn_clear_history">Clear All</string>
+    <string name="empty_history">No recent scans yet. Use the floating button or direct scan to get started.</string>
+
+    <!-- Scanner Screen -->
+    <string name="scanner_title">Scan Barcode / QR</string>
+    <string name="scanner_instruction">Align barcode within the frame to scan and auto-paste</string>
+    <string name="torch_on">Torch ON</string>
+    <string name="torch_off">Torch OFF</string>
+
+    <!-- Service Notification -->
+    <string name="notification_channel_name">Barcode Floating Service</string>
+    <string name="notification_channel_desc">Keeps the floating barcode button active on your screen.</string>
+    <string name="notification_title">Barcode Floating Scanner Active</string>
+    <string name="notification_text">Tap the floating icon on your screen to read and paste barcodes.</string>
+    <string name="notification_stop">Stop Service</string>
+</resources>

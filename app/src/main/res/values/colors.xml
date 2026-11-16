@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand / Material Colors -->
+    <color name="primary">#1976D2</color>
+    <color name="primary_dark">#0D47A1</color>
+    <color name="primary_light">#BBDEFB</color>
+    <color name="accent">#00B0FF</color>
+
+    <color name="background_light">#F5F7FA</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="text_primary">#212121</color>
+    <color name="text_secondary">#757575</color>
+    <color name="divider">#EEEEEE</color>
+
+    <!-- State & Alert Colors -->
+    <color name="color_success">#2E7D32</color>
+    <color name="color_success_light">#E8F5E9</color>
+    <color name="color_warning">#F57C00</color>
+    <color name="color_warning_light">#FFF3E0</color>
+    <color name="color_error">#D32F2F</color>
+
+    <!-- Floating Button & Scanner Specific Colors -->
+    <color name="floating_btn_color">#0091EA</color>
+    <color name="floating_btn_pressed">#0064B7</color>
+    <color name="scanner_reticle_border">#00E5FF</color>
+    <color name="scanner_overlay_mask">#99000000</color>
+    <color name="scanner_laser">#FF1744</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+</resources>

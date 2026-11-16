@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.55"
+        android:scaleY="0.55"
+        android:translateX="24.3"
+        android:translateY="24.3">
+        <!-- Reticle corners -->
+        <path
+            android:fillColor="#00E5FF"
+            android:pathData="M15,35 L15,15 L35,15 L35,21 L21,21 L21,35 Z
+                              M85,35 L85,15 L65,15 L65,21 L79,21 L79,35 Z
+                              M15,65 L15,85 L35,85 L35,79 L21,79 L21,65 Z
+                              M85,65 L85,85 L65,85 L65,79 L79,79 L79,65 Z" />
+        <!-- Barcode lines -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M27,30 h5 v40 h-5 Z
+                              M36,30 h3 v40 h-3 Z
+                              M43,30 h7 v40 h-7 Z
+                              M54,30 h3 v40 h-3 Z
+                              M61,30 h6 v40 h-6 Z
+                              M71,30 h4 v40 h-4 Z" />
+        <!-- Laser line -->
+        <path
+            android:fillColor="#FF1744"
+            android:pathData="M12,49 h76 v3 h-76 Z" />
+    </group>
+</vector>
