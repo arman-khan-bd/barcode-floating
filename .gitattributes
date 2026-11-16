@@ -1,0 +1,4 @@
+# Enforce Unix LF line endings for gradlew shell script
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf

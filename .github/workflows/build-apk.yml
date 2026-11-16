@@ -24,26 +24,19 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Setup Gradle 8.2 CLI directly in the runner environment
+      # Install Gradle 8.2 directly in the runner environment
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.2'
 
-      # Regenerates gradle-wrapper.jar if it was missing or ignored by git
-      - name: Ensure Gradle Wrapper
-        run: |
-          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "gradle-wrapper.jar not found in repository. Generating wrapper..."
-            gradle wrapper --gradle-version 8.2
-          fi
-          chmod +x gradlew
-
+      # Build Debug APK directly using the Gradle CLI (completely avoids wrapper jar issues)
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace
 
+      # Build Release APK
       - name: Build Release APK (Unsigned)
-        run: ./gradlew assembleRelease --stacktrace
+        run: gradle assembleRelease --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
