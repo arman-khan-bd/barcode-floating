@@ -185,6 +185,11 @@ public class FloatingBarcodeService extends Service {
             return;
         }
 
+        // Snapshot current focused input (e.g., in Chrome/browser) before camera window opens
+        if (BarcodePasteAccessibilityService.isServiceActive()) {
+            BarcodePasteAccessibilityService.captureCurrentFocusedNode();
+        }
+
         // Launch Scanner Activity directly
         Intent scannerIntent = new Intent(this, ScannerActivity.class);
         scannerIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
