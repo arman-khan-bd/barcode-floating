@@ -2,6 +2,8 @@ package com.example.barcodefloating;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.GestureDescription;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
@@ -96,6 +98,9 @@ public class BarcodePasteAccessibilityService extends AccessibilityService {
         }
     }
 
+    /**
+     * Snapshots the active focused/interacted node in the application before the camera window opens.
+     */
     public static void captureCurrentFocusedNode() {
         BarcodePasteAccessibilityService service = (sInstance != null) ? sInstance.get() : null;
         if (service != null) {
@@ -105,14 +110,43 @@ public class BarcodePasteAccessibilityService extends AccessibilityService {
 
     public void snapshotFocus() {
         try {
+            // 1. Direct input focus
             AccessibilityNodeInfo node = findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
             if (node == null) {
                 node = findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY);
             }
-            if (node != null) {
+            if (node != null && isCandidateInputNode(node)) {
                 saveTargetCandidate(node);
                 node.recycle();
+                return;
             }
+            if (node != null) {
+                node.recycle();
+            }
+
+            // 2. Search application window tree for focused or editable node
+            List<AccessibilityNodeInfo> roots = getApplicationRoots();
+            for (AccessibilityNodeInfo root : roots) {
+                AccessibilityNodeInfo found = searchTree(root, true);
+                if (found != null) {
+                    saveTargetCandidate(found);
+                    found.recycle();
+                    recycleRoots(roots);
+                    return;
+                }
+            }
+
+            // 3. Fallback: find any candidate input node visible on screen
+            for (AccessibilityNodeInfo root : roots) {
+                AccessibilityNodeInfo candidate = searchTree(root, false);
+                if (candidate != null) {
+                    saveTargetCandidate(candidate);
+                    candidate.recycle();
+                    recycleRoots(roots);
+                    return;
+                }
+            }
+            recycleRoots(roots);
         } catch (Exception ignored) {
         }
     }
@@ -139,8 +173,7 @@ public class BarcodePasteAccessibilityService extends AccessibilityService {
     }
 
     /**
-     * Schedules paste attempts progressively (200ms, 500ms, 900ms) to accommodate
-     * WebView/Chrome virtual DOM re-attachment delays when returning from scanner.
+     * Schedules auto-paste after ScannerActivity finishes.
      */
     public static void schedulePaste(final String text) {
         if (text == null || text.isEmpty()) {
@@ -152,82 +185,115 @@ public class BarcodePasteAccessibilityService extends AccessibilityService {
             return;
         }
 
-        // Attempt 1: 200ms
-        sMainHandler.postDelayed(() -> {
-            boolean pasted = service.performPaste(text);
-            if (pasted) {
+        // Attempt 1: 250ms after scanner activity finishes
+        sMainHandler.postDelayed(() -> service.performPaste(text, (success) -> {
+            if (success) {
                 Toast.makeText(service, "✓ Pasted into input field & copied to clipboard", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            // Attempt 2: 500ms (vital for Chromium/WebViews to restore virtual nodes)
-            sMainHandler.postDelayed(() -> {
-                boolean retry1 = service.performPaste(text);
-                if (retry1) {
-                    Toast.makeText(service, "✓ Pasted into input field & copied to clipboard", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-
-                // Attempt 3: 900ms fallback
-                sMainHandler.postDelayed(() -> {
-                    boolean retry2 = service.performPaste(text);
-                    if (retry2) {
+            } else {
+                // Attempt 2: 650ms fallback for WebViews that re-render slowly
+                sMainHandler.postDelayed(() -> service.performPaste(text, (retrySuccess) -> {
+                    if (retrySuccess) {
                         Toast.makeText(service, "✓ Pasted into input field & copied to clipboard", Toast.LENGTH_SHORT).show();
                     } else {
                         Toast.makeText(service, "✓ Copied to clipboard (Tap input and paste)", Toast.LENGTH_SHORT).show();
                     }
-                }, 400);
-            }, 300);
-        }, 200);
+                }), 400);
+            }
+        }), 250);
+    }
+
+    public interface PasteCallback {
+        void onResult(boolean success);
     }
 
     /**
-     * Searches for the target input across native and WebView/HTML nodes and pastes the text.
+     * Bypasses website paste restrictions by simulating a physical tap to activate web focus,
+     * then calling ACTION_SET_TEXT (which bypasses JavaScript onpaste blockers) and ACTION_PASTE.
      */
-    public synchronized boolean performPaste(String text) {
-        AccessibilityNodeInfo targetNode = findTargetInputNode();
+    public synchronized void performPaste(final String text, final PasteCallback callback) {
+        final AccessibilityNodeInfo targetNode = findTargetInputNode();
         if (targetNode == null) {
-            return false;
+            if (callback != null) callback.onResult(false);
+            return;
         }
 
-        boolean success = false;
-
+        final Rect bounds = new Rect();
         try {
-            // Step 1: Request focus on the target node
-            targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-            targetNode.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS);
-
-            // Step 2: Try ACTION_SET_TEXT (supported since API 21)
-            Bundle arguments = new Bundle();
-            arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
-            success = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
-
-            // Step 3: If SET_TEXT wasn't accepted (common in WebViews/HTML inputs), try ACTION_PASTE
-            if (!success) {
-                success = targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE);
-            }
-
-            // Step 4: If still unhandled, simulate a tap to open input connection, then paste
-            if (!success) {
-                targetNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                success = targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE);
-            }
-
-            // Step 5: WebViews sometimes process paste via their parent container
-            if (!success) {
-                AccessibilityNodeInfo parent = targetNode.getParent();
-                if (parent != null) {
-                    success = parent.performAction(AccessibilityNodeInfo.ACTION_PASTE);
-                    parent.recycle();
-                }
-            }
+            targetNode.getBoundsInScreen(bounds);
         } catch (Exception ignored) {
-            success = false;
-        } finally {
-            targetNode.recycle();
         }
 
-        return success;
+        final Runnable executePaste = () -> {
+            boolean success = false;
+            try {
+                // Request focus on the target node
+                targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                targetNode.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS);
+
+                // METHOD 1: ACTION_SET_TEXT (Bypasses website onpaste="return false" / preventDefault blockers)
+                Bundle arguments = new Bundle();
+                arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                success = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+
+                // METHOD 2: ACTION_PASTE (From system clipboard)
+                if (!success) {
+                    success = targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE);
+                }
+
+                // METHOD 3: Fallback on parent container (for WebViews)
+                if (!success) {
+                    AccessibilityNodeInfo parent = targetNode.getParent();
+                    if (parent != null) {
+                        success = parent.performAction(AccessibilityNodeInfo.ACTION_PASTE);
+                        parent.recycle();
+                    }
+                }
+            } catch (Exception ignored) {
+                success = false;
+            } finally {
+                targetNode.recycle();
+            }
+
+            if (callback != null) {
+                callback.onResult(success);
+            }
+        };
+
+        // If on Android 7.0+ (API 24+) and bounds are valid, simulate a real touch tap first.
+        // This removes web browser blur and activates the input field before text insertion.
+        if (bounds.width() > 0 && bounds.height() > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            simulateTap(bounds.centerX(), bounds.centerY(), executePaste);
+        } else {
+            executePaste.run();
+        }
+    }
+
+    /**
+     * Simulates a physical touch tap on the screen at (x, y) to activate the web input.
+     */
+    private void simulateTap(int x, int y, Runnable onCompleted) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && x > 0 && y > 0) {
+            Path clickPath = new Path();
+            clickPath.moveTo(x, y);
+            GestureDescription.StrokeDescription stroke =
+                    new GestureDescription.StrokeDescription(clickPath, 0, 50);
+            GestureDescription.Builder builder = new GestureDescription.Builder();
+            builder.addStroke(stroke);
+
+            dispatchGesture(builder.build(), new GestureResultCallback() {
+                @Override
+                public void onCompleted(GestureDescription gestureDescription) {
+                    sMainHandler.postDelayed(onCompleted, 80);
+                }
+
+                @Override
+                public void onCancelled(GestureDescription gestureDescription) {
+                    onCompleted.run();
+                }
+            }, null);
+        } else {
+            onCompleted.run();
+        }
     }
 
     private AccessibilityNodeInfo findTargetInputNode() {
@@ -261,7 +327,7 @@ public class BarcodePasteAccessibilityService extends AccessibilityService {
 
         List<AccessibilityNodeInfo> roots = getApplicationRoots();
 
-        // 4. Search for node matching last known placeholder/hint or name (e.g. "Enter Worker Id or Passport No...")
+        // 4. Search for node matching placeholder/hint or name (e.g. "Enter Worker Id or Passport No..." or "WorkerCode")
         if (mLastHintText != null || mLastViewId != null) {
             for (AccessibilityNodeInfo root : roots) {
                 AccessibilityNodeInfo match = findMatchingNode(root, mLastHintText, mLastViewId);
@@ -281,7 +347,7 @@ public class BarcodePasteAccessibilityService extends AccessibilityService {
             }
         }
 
-        // 6. Fallback: Search for any visible candidate editable node in application windows
+        // 6. Fallback: Search for any visible candidate input node in application windows
         for (AccessibilityNodeInfo root : roots) {
             AccessibilityNodeInfo visible = searchTree(root, false);
             if (visible != null) {
@@ -299,9 +365,10 @@ public class BarcodePasteAccessibilityService extends AccessibilityService {
 
         if (isCandidateInputNode(node)) {
             if (hint != null && node.getHintText() != null) {
-                if (node.getHintText().toString().equalsIgnoreCase(hint)
-                        || hint.toLowerCase().contains(node.getHintText().toString().toLowerCase())
-                        || node.getHintText().toString().toLowerCase().contains(hint.toLowerCase())) {
+                String nodeHint = node.getHintText().toString();
+                if (nodeHint.equalsIgnoreCase(hint)
+                        || hint.toLowerCase().contains(nodeHint.toLowerCase())
+                        || nodeHint.toLowerCase().contains(hint.toLowerCase())) {
                     return AccessibilityNodeInfo.obtain(node);
                 }
             }
@@ -356,24 +423,47 @@ public class BarcodePasteAccessibilityService extends AccessibilityService {
     private boolean isCandidateInputNode(AccessibilityNodeInfo node) {
         if (node == null) return false;
 
-        // Check A: Explicitly marked editable (HTML input / textarea / EditText)
+        // 1. Explicitly marked editable
         if (node.isEditable()) {
             return true;
         }
 
-        // Check B: Native EditText classes
+        // 2. Has hint/placeholder text (like "Enter Worker Id or Passport No...")
+        if (node.getHintText() != null && node.getHintText().length() > 0) {
+            return true;
+        }
+
+        // 3. Class name indicates an input/editable field
         CharSequence className = node.getClassName();
         if (className != null) {
             String name = className.toString();
-            if (name.contains("EditText") || name.contains("TextInputEditText") || name.contains("AutoCompleteTextView")) {
+            if (name.contains("EditText") || name.contains("TextInputEditText")
+                    || name.contains("AutoCompleteTextView") || name.contains("SearchField")
+                    || name.contains("Input")) {
                 return true;
             }
         }
 
-        // Check C: Supports text actions (SET_TEXT or PASTE)
+        // 4. Declares text editing actions (SET_TEXT or PASTE)
         for (AccessibilityNodeInfo.AccessibilityAction action : node.getActionList()) {
             if (action.getId() == AccessibilityNodeInfo.ACTION_SET_TEXT
                     || action.getId() == AccessibilityNodeInfo.ACTION_PASTE) {
+                return true;
+            }
+        }
+
+        // 5. Check view ID / HTML name attribute (e.g. "WorkerCode")
+        if (node.getViewIdResourceName() != null && !node.getViewIdResourceName().isEmpty()) {
+            String id = node.getViewIdResourceName().toLowerCase();
+            if (id.contains("search") || id.contains("code") || id.contains("worker")
+                    || id.contains("input") || id.contains("text")) {
+                return true;
+            }
+        }
+
+        // 6. Focusable + Clickable leaf node in a web/app view
+        if (node.isFocusable() && node.getChildCount() == 0) {
+            if (className != null && !className.toString().contains("Button")) {
                 return true;
             }
         }
